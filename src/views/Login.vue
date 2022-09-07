@@ -5,8 +5,8 @@
     const router = useRouter();
 
     let form = ref({
-        username: '',
-        password: ''
+        username: 'admin123',
+        password: 'admin123'
     });
 
     const login = () => {
