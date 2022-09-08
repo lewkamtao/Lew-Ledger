@@ -20,7 +20,7 @@ export default defineConfig({
         // 设置代理
         proxy: {
             '/api': {
-                target: 'http://ledger.kamtao.com/api',
+                target: 'http://localhost:3999',
                 changeOrigin: true,
                 rewrite: (path: string) => path.replace(/^\/api/, '')
             }

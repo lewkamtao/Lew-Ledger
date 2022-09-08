@@ -23,19 +23,14 @@
     let _curDate = Number(moment(`${curYear.value}-${curMonth.value}-${curDay.value}`).format('X'));
     let isloading = ref(false);
     let visible = ref(false);
-
+    let amount_type = ref('1');
     let form = ref({
         birthday: '',
-        type: '1',
         amount: '',
         purpose: ''
     });
 
-    let group = ref({
-        expenditure: '',
-        income: '',
-        total: ''
-    });
+    let week = ref(['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期天']);
 
     let result = ref([] as any);
 
@@ -110,6 +105,7 @@
 
     const getData = () => {
         isloading.value = true;
+        formatData();
         let start = moment(`${curYear.value}-${curMonth.value}`)
             .startOf('month')
             .format('YYYY-MM-DD');
@@ -148,15 +144,19 @@
         location.reload();
     };
 
-    const save = () => {
-        let { birthday, amount, type, purpose } = form.value;
+    const saveOrder = () => {
+        let { birthday, amount, purpose } = form.value;
+        if (amount_type.value == '1') {
+            amount = (0 - Number(amount)).toFixed(2);
+        } else {
+            amount = Number(amount).toFixed(2);
+        }
 
         axios
             .post({
-                url: `/order`,
+                url: '/order',
                 data: {
                     birthday: moment(birthday).format(),
-                    type: parseInt(type),
                     amount: Number(amount),
                     purpose: purpose
                 }
@@ -170,14 +170,44 @@
             });
     };
 
+    const deleteOrder = (id: any) => {
+        axios
+            .delete({
+                url: '/order/' + id
+            })
+            .then((res: any) => {
+                if (res.code == 200) {
+                    LewMessage.success('删除成功');
+                }
+            });
+    };
+
+    var timer: any;
+    const checkAmount = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            if (Number(form.value.amount) < 0) {
+                form.value.amount = '';
+                LewMessage.error('请输入大于0的金额，请重新输入');
+            }
+            if (Number(form.value.amount) > 100000) {
+                form.value.amount = '';
+                LewMessage.error('单笔金额不能超过十万，请重新输入');
+            }
+        }, 250);
+    };
+
     const close = () => {
         form.value = {
             birthday: '',
-            type: '1',
             amount: '',
             purpose: ''
         };
         visible.value = false;
+    };
+
+    const formatPrice = (num: any) => {
+        return String(num).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     };
 
     onMounted(() => {
@@ -201,7 +231,6 @@
                     /></lew-button>
                 </lew-flex>
                 <lew-flex style="width: auto">
-                    <lew-button @click="openModal()">记一笔</lew-button>
                     <lew-button @click="loginOut" type="error">注销</lew-button>
                 </lew-flex>
             </lew-flex>
@@ -224,7 +253,7 @@
                                             (item?.value || item?.status) &&
                                             item.showDate == item.date
                                         "
-                                        class="money"
+                                        class="amount"
                                     >
                                         {{
                                             item?.expand?.total > 0
@@ -236,17 +265,32 @@
                             </template>
                             <template #popover-body="{ hide }">
                                 <div class="popover-body" style="width: 180px">
-                                    <div class="title">{{ item?.expand?.date }}</div>
+                                    <div class="title">
+                                        {{ moment(item?.expand?.date).format('M月D日') }}
+                                        {{ week[moment(item?.expand?.date).day() - 1] }}
+                                    </div>
                                     <div
                                         v-for="(order, index) in item?.expand?.order"
                                         :key="index"
                                         class="popover-item"
                                         :class="`${
-                                            order.type == 1 ? 'expenditure-item' : 'income-item'
+                                            order.amount < 0 ? 'expenditure-item' : 'income-item'
                                         }`"
                                     >
-                                        <div class="label">{{ order.purpose }}</div>
-                                        <div class="value">￥{{ order.amount }}</div>
+                                        <div
+                                            v-tooltip="{
+                                                content: order.purpose,
+                                                placement: 'left',
+                                                trigger: 'hover'
+                                            }"
+                                            class="label"
+                                            >{{ order.purpose }}</div
+                                        >
+                                        <div class="value">
+                                            {{
+                                                order.amount > 0 ? '+' + order.amount : order.amount
+                                            }}
+                                        </div>
                                     </div>
                                     <br />
                                     <lew-button size="small" @click="hide(), openModal(item)"
@@ -267,9 +311,13 @@
                             </div>
                             <div
                                 v-if="(item?.value || item?.status) && item.showDate == item.date"
-                                class="money"
+                                class="amount"
                             >
-                                {{ item?.expand?.total || item?.status }}
+                                {{
+                                    item?.expand?.total > 0
+                                        ? '+' + item?.expand?.total
+                                        : item?.expand?.total || item?.status
+                                }}
                             </div>
                         </div>
                     </div>
@@ -277,29 +325,32 @@
                 <div class="footer">
                     <div>
                         <div class="label">月收入</div>
-                        <div class="value">￥{{ result.income }}</div>
+                        <div class="value">{{ formatPrice(result.income) }}</div>
                     </div>
                     <div>
                         <div class="label">月支出</div>
-                        <div class="value">￥{{ result.expenditure }}</div>
+                        <div class="value">{{ formatPrice(result.expenditure) }}</div>
                     </div>
                     <div>
                         <div class="label">月盈亏</div>
-                        <div class="value">￥{{ result.profit_loss }}</div>
+                        <div class="value">{{ formatPrice(result.profit_loss) }}</div>
                     </div>
                 </div>
             </div>
         </div>
         <lew-modal :visible="visible" width="300px">
             <div class="modal-body">
-                <lew-title :bold="700" style="color: #000; margin-bottom: 20px"> 记一笔 </lew-title>
+                <lew-title :bold="700" style="color: #000; margin-bottom: 20px">
+                    {{ moment(form.birthday).format('M月D日') }}
+                    {{ week[moment(form.birthday).day() - 1] }}
+                </lew-title>
 
                 <lew-form-item direction="y" title="">
                     <lew-tabs
                         round
                         style="width: 100%"
                         itemWidth="100%"
-                        v-model="form.type"
+                        v-model="amount_type"
                         :options="[
                             { label: '支出', value: '1' },
                             { label: '收入', value: '2' }
@@ -307,12 +358,8 @@
                     ></lew-tabs>
                 </lew-form-item>
 
-                <lew-form-item direction="x" title="日期">
-                    <lew-date-picker v-model="form.birthday" />
-                </lew-form-item>
-
                 <lew-form-item direction="x" title="金额">
-                    <lew-input type="number" v-model="form.amount" />
+                    <lew-input type="number" v-model="form.amount" @input="checkAmount" />
                 </lew-form-item>
 
                 <lew-form-item style="margin-bottom: 30px" direction="x" title="用途">
@@ -321,7 +368,7 @@
 
                 <lew-flex x="end">
                     <lew-button type="normal" @click="close">关闭 </lew-button>
-                    <lew-button @click="save">保存</lew-button>
+                    <lew-button @click="saveOrder">保存</lew-button>
                 </lew-flex></div
             >
         </lew-modal>
@@ -336,8 +383,10 @@
         overflow: hidden;
         user-select: none;
 
+        --width: 35rem;
+
         .main {
-            width: calc(80px * 6 + 160px);
+            width: calc(var(--width) + 80px);
             padding: 10px;
             box-sizing: border-box;
             margin: auto;
@@ -351,7 +400,7 @@
                 box-shadow: 0px 10px 30px rgb(207, 207, 207);
                 padding: 15px;
                 box-sizing: border-box;
-                border-radius: var(--lew-form-border-radius);
+                border-radius: var(--lew-border-radius);
                 overflow: hidden;
 
                 .item {
@@ -359,6 +408,7 @@
                     flex-direction: column;
                     justify-content: center;
                     align-items: center;
+                    overflow: hidden;
                 }
                 .calendar-header {
                     display: flex;
@@ -367,8 +417,8 @@
                     font-size: 16px;
                     gap: 5px;
                     .item {
-                        width: 80px;
-                        height: 30px;
+                        width: calc(var(--width) / 7);
+                        height: 2em;
                         color: #999;
                     }
                 }
@@ -378,17 +428,22 @@
                     justify-content: center;
                     gap: 5px;
                     .item {
-                        border-radius: var(--lew-form-border-radius);
+                        border-radius: var(--lew-border-radius);
                         gap: 5px;
-                        width: 80px;
-                        height: 80px;
+                        width: calc(var(--width) / 7);
+                        height: calc(var(--width) / 7);
 
                         .show-date {
                             font-size: 16px;
                         }
-                        .money {
+                        .amount {
                             padding: 4px;
                             font-size: 14px;
+                            width: 90%;
+                            text-align: center;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
                         }
                     }
 
@@ -415,7 +470,7 @@
                     .expenditure-item {
                         background-color: rgba(3, 189, 99, 0.2);
                         color: #000;
-                        .money {
+                        .amount {
                             color: rgb(13, 109, 63);
                         }
                     }
@@ -429,7 +484,7 @@
                     .income-item {
                         background-color: rgba(201, 0, 23, 0.2);
                         color: #000;
-                        .money {
+                        .amount {
                             color: rgb(157, 0, 18);
                         }
                     }
@@ -444,23 +499,23 @@
             .footer {
                 display: flex;
                 align-items: center;
-                justify-content: flex-end;
+                justify-content: space-around;
                 background-color: #eee;
-                border-radius: var(--lew-form-border-radius);
+                border-radius: var(--lew-border-radius);
                 padding: 10px 20px;
                 box-sizing: border-box;
                 margin-top: 10px;
                 > div {
                     display: flex;
                     flex-direction: column;
-                    align-items: flex-end;
-                    margin-left: 50px;
+                    align-items: center;
                     .label {
                         margin-bottom: 5px;
-                        color: rgb(125, 125, 125);
+                        color: rgb(154, 154, 154);
+                        font-weight: 200;
                     }
                     .value {
-                        font-weight: bold;
+                        font-size: 16px;
                     }
                 }
             }
@@ -475,6 +530,8 @@
         display: flex;
         flex-direction: column;
         padding: 5px;
+        overflow: hidden;
+        user-select: none;
         .title {
             margin-bottom: 5px;
             font-weight: bold;
@@ -485,6 +542,12 @@
             align-items: center;
             border-bottom: 1px #eee solid;
             padding: 8px 0px;
+            .label {
+                width: auto;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
 
             .value {
                 background-color: rgb(212, 212, 212);
@@ -497,7 +560,6 @@
             .value {
                 background-color: rgba(3, 189, 99, 0.2);
                 padding: 0px 4px;
-                border-radius: 2px;
             }
         }
 
@@ -505,7 +567,6 @@
             .value {
                 background-color: rgba(201, 0, 23, 0.2);
                 padding: 0px 4px;
-                border-radius: 2px;
             }
         }
         .popover-item:last-child {
