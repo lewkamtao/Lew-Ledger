@@ -12,15 +12,15 @@ export default defineConfig({
     },
     plugins: [vue()],
     server: {
-        port: 8080, //启动端口
+        port: 3000, //启动端口
         hmr: {
             host: 'localhost',
-            port: 8080
+            port: 3000
         },
         // 设置代理
         proxy: {
             '/api': {
-                target: 'http://localhost:3999',
+                target: 'https://ledger.kamtao.com/api',
                 changeOrigin: true,
                 rewrite: (path: string) => path.replace(/^\/api/, '')
             }
